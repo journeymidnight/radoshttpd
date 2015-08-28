@@ -36,7 +36,6 @@ var (
 	LOGPATH                    = "/var/log/wuzei/wuzei.log"
 	PIDFILE                    = "/var/run/wuzei/wuzei.pid"
 	QUEUETIMEOUT time.Duration = 5 /* seconds */
-	QUEUELENGTH                = 100
 	MONTIMEOUT                 = "30"
 	OSDTIMEOUT                 = "30"
 	BUFFERSIZE                 = 4 << 20 /* 4M */
@@ -76,12 +75,12 @@ func (rd *RadosDownloader) Read(p []byte) (n int, err error) {
 	/* local buffer is empty */
 	if rd.waterhighmark == rd.waterlowmark {
 		count, err = rd.striper.Read(rd.soid, rd.buffer, uint64(rd.offset))
+		if count == 0 {
+			return 0, io.EOF
+		}
 		/* Timeout or read error occurs */
 		if err != nil {
 			return count, errors.New("Timeout or Read Error")
-		}
-		if count == 0 {
-			return 0, io.EOF
 		}
 		rd.offset += int64(count)
 		rd.waterhighmark = count
@@ -130,7 +129,7 @@ type RequestQueue struct {
 }
 
 func (r *RequestQueue) Init() {
-	r.slots = make(chan bool, QUEUELENGTH)
+	r.slots = make(chan bool, cfg.QueueLength)
 }
 
 func (r *RequestQueue) inc() error {
@@ -230,6 +229,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 
 	/* use 4M buffer to read */
 	buffersize := BUFFERSIZE
+	// TODO use sync.Pool 
 	rd := RadosDownloader{&striper, soid, 0, make([]byte, buffersize), 0, 0}
 
 	/* set let ServerContent to detect file type  */
@@ -672,6 +672,7 @@ type gcCfg struct {
 	Peers []string  // IP addresses of all the nodes
 	ListenPort int
 	SocketTimeout int
+	QueueLength int
 }
 
 var cfg gcCfg

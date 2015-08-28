@@ -59,8 +59,11 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 func NewListener(port int, readTimeout, writeTimeout time.Duration) (*Listener, error){
 	originalListener, err := net.Listen("tcp", ":" + strconv.Itoa(port))
-	sl, err := stoppableListener.New(originalListener)
+	if err != nil {
+		return nil, err
+	}
 
+	sl, err := stoppableListener.New(originalListener)
 	if err != nil {
 		return nil, err
 	}

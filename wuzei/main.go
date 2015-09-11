@@ -45,7 +45,7 @@ var (
 	STRIPE_UNIT		   = uint(512 << 10) /* 512K */
 	OBJECT_SIZE                = uint(64 << 20) /* 64M */
 	STRIPE_COUNT               = uint(4)
-	SECRET                     = "wuzei"
+	SECRET                     = ""
 
 	/* global variables */
 	slog     *log.Logger
@@ -158,7 +158,7 @@ func AuthMe(key string) martini.Handler {
 		mac.Write([]byte(req.URL.Path))
 		expected := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 		if !SecureCompare(auth, expected) {
-			slog.Printf("expected key is %s, but received key is %s", expected, auth);
+			slog.Println("URL:", req.URL, "expected key is %s, but received key is %s", expected, auth);
 			ErrorHandler(res, req, http.StatusUnauthorized)
 		}
 	}
@@ -181,7 +181,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 	wg.Add(1)
 	defer wg.Done()
 	if err := ReqQueue.inc(); err != nil {
-		slog.Println("request timeout")
+		slog.Println("URL:", r.URL, ", request timeout")
 		ErrorHandler(w, r, http.StatusRequestTimeout)
 		return
 	}
@@ -191,7 +191,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 	soid := params["soid"]
 	pool, err := conn.OpenPool(poolname)
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "open pool failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -199,7 +199,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 
 	striper, err := pool.CreateStriper()
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "Create Striper failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -208,7 +208,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 	filename := fmt.Sprintf("%s", soid)
 	size, _, err := striper.State(soid)
 	if err != nil {
-		slog.Println("failed to get object " + soid)
+		slog.Println("URL:", r.URL, "failed to get object " + soid)
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -252,7 +252,7 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 	defer wg.Done()
 
 	if err := ReqQueue.inc(); err != nil {
-		slog.Println("request timeout")
+		slog.Println("URL:", r.URL, "request timeout")
 		ErrorHandler(w, r, http.StatusRequestTimeout)
 		return
 	}
@@ -262,7 +262,7 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 	soid := params["soid"]
 	pool, err := conn.OpenPool(poolname)
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "open pool failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -270,7 +270,7 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 
 	striper, err := pool.CreateStriper()
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "Create Striper failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -290,13 +290,13 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 		o := strings.Split(bytesRange, "-")
 		start, err = strconv.ParseInt(o[0], 10, 64)
 		if err != nil {
-			slog.Printf("parse Content-Range failed %s", bytesRange)
+			slog.Println("URL:", r.URL, "parse Content-Range failed %s", bytesRange)
 			ErrorHandler(w, r, http.StatusBadRequest)
 			return
 		}
 		end, err = strconv.ParseInt(o[1], 10, 64)
 		if err != nil {
-			slog.Printf("parse Content-Range failed %s", bytesRange)
+			slog.Println("URL:", r.URL, "parse Content-Range failed %s", bytesRange)
 			ErrorHandler(w, r, http.StatusBadRequest)
 			return
 		}
@@ -309,7 +309,7 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 	for offset <= end || bytesRange == "" {
 		count, err = striper.Read(soid, buf, uint64(offset))
 		if err != nil {
-			slog.Printf("failed to read data for md5sum")
+			slog.Println("URL:", r.URL, "failed to read data for md5sum")
 			ErrorHandler(w, r, 404)
 			return
 		}
@@ -325,7 +325,7 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 		}
 
 		if err = md5_ctx.Update(buf[:l]); err != nil {
-			slog.Printf("calc md5sum failed")
+			slog.Println("URL:", r.URL, "calc md5sum failed")
 			ErrorHandler(w, r, 501)
 			return
 		}
@@ -334,7 +334,7 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 
 	var b []byte
 	if b, err = md5_ctx.Final(); err != nil {
-		slog.Printf("calc md5sum failed")
+		slog.Println("URL:", r.URL, "calc md5sum failed")
 		ErrorHandler(w, r, 501)
 		return
 	}
@@ -349,7 +349,7 @@ func InfoHandler(params martini.Params, w http.ResponseWriter, r *http.Request) 
 	defer wg.Done()
 
 	if err := ReqQueue.inc(); err != nil {
-		slog.Println("request timeout")
+		slog.Println("URL:", r.URL, "request timeout")
 		ErrorHandler(w, r, http.StatusRequestTimeout)
 		return
 	}
@@ -359,7 +359,7 @@ func InfoHandler(params martini.Params, w http.ResponseWriter, r *http.Request) 
 	soid := params["soid"]
 	pool, err := conn.OpenPool(poolname)
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "open pool failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -367,7 +367,7 @@ func InfoHandler(params martini.Params, w http.ResponseWriter, r *http.Request) 
 
 	striper, err := pool.CreateStriper()
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "Create Striper failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -375,7 +375,7 @@ func InfoHandler(params martini.Params, w http.ResponseWriter, r *http.Request) 
 
 	size, _, err := striper.State(soid)
 	if err != nil {
-		slog.Println("failed to get object " + soid)
+		slog.Println("URL:%s, failed to get object " + soid, r.URL)
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -390,7 +390,7 @@ func DeleteHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 	wg.Add(1)
 	defer wg.Done()
 	if err := ReqQueue.inc(); err != nil {
-		slog.Println("request timeout")
+		slog.Println("URL:", r.URL, "request timeout")
 		ErrorHandler(w, r, http.StatusRequestTimeout)
 		return
 	}
@@ -400,7 +400,7 @@ func DeleteHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 	soid := params["soid"]
 	pool, err := conn.OpenPool(poolname)
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "open pool failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -408,14 +408,14 @@ func DeleteHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 
 	striper, err := pool.CreateStriper()
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "Create Striper failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
 	defer striper.Destroy()
 	err = striper.Delete(soid)
 	if err != nil {
-		slog.Printf("delete object %s/%s failed\n", poolname, soid)
+		slog.Println("URL:", r.URL, "delete object %s/%s failed\n", poolname, soid)
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -478,7 +478,7 @@ func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 	wg.Add(1)
 	defer wg.Done()
 	if err := ReqQueue.inc(); err != nil {
-		slog.Println("request timeout")
+		slog.Println("URL:", r.URL, "request timeout")
 		ErrorHandler(w, r, http.StatusRequestTimeout)
 		return
 	}
@@ -488,14 +488,14 @@ func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 	soid := params["soid"]
 	pool, err := conn.OpenPool(poolname)
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "open pool failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
 	defer pool.Destroy()
 	striper, err := pool.CreateStriper()
 	if err != nil {
-		slog.Println("open pool failed")
+		slog.Println("URL:", r.URL, "Create Striper failed")
 		ErrorHandler(w, r, http.StatusNotFound)
 		return
 	}
@@ -520,20 +520,20 @@ func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 		/* o[0] is the start, o[1] is the end */
 		start, err = strconv.ParseInt(o[0], 10, 64)
 		if err != nil {
-			slog.Printf("parse Content-Range failed %s", bytesRange)
+			slog.Println("URL:", r.URL, "parse Content-Range failed %s", bytesRange)
 			ErrorHandler(w, r, http.StatusBadRequest)
 			return
 		}
 		end, err = strconv.ParseInt(o[1], 10, 64)
 		if err != nil {
-			slog.Printf("parse Content-Range failed %s", bytesRange)
+			slog.Println("URL:", r.URL, "parse Content-Range failed %s", bytesRange)
 			ErrorHandler(w, r, http.StatusBadRequest)
 			return
 		}
 
 		size, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			slog.Printf("parse Content-Range failed %s", bytesRange)
+			slog.Println("URL:", r.URL, "parse Content-Range failed %s", bytesRange)
 			ErrorHandler(w, r, http.StatusBadRequest)
 			return
 		}
@@ -597,7 +597,7 @@ func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 		c.Create()
 		_, err = striper.WriteAIO(c, soid, bl, uint64(dest_offset))
 		if err != nil {
-			slog.Printf("starting to write aio failed")
+			slog.Println("URL:", r.URL, "starting to write aio failed")
 			c.Release()
 			drain_pending(pending)
 			ErrorHandler(w, r, 501)
@@ -609,7 +609,7 @@ func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 		//if the front is finished, cleanup
 		for pending_has_completed(pending) {
 			if ret := wait_pending_front(pending); ret < 0 {
-				slog.Printf("write aio failed or timeout, in pending_has_completed")
+				slog.Println("URL:%s, write aio failed or timeout, in pending_has_completed", r.RequestURI)
 				drain_pending(pending)
 				ErrorHandler(w, r, 408)
 				return
@@ -619,7 +619,7 @@ func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 		if pending.Len() > AIOCONCURRENT {
 			slog.Println("inputstream is a bit faster, wait to finish")
 			if ret := wait_pending_front(pending); ret < 0 {
-				slog.Printf("write aio failed or timeout, in waiting pending ")
+				slog.Println("URL:%s, write aio failed or timeout, in waiting pending ", r.RequestURI)
 				drain_pending(pending)
 				ErrorHandler(w, r, 408)
 				return
@@ -640,7 +640,7 @@ func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 
 	//drain_pending
 	if ret := drain_pending(pending); ret < 0 {
-		slog.Printf("write aio failed or timeout, in draining")
+		slog.Println("URL:%s, write aio failed or timeout, in draining", r.RequestURI)
 		ErrorHandler(w, r, 408)
 		return
 	}
@@ -673,6 +673,7 @@ type gcCfg struct {
 	ListenPort int
 	SocketTimeout int
 	QueueLength int
+	SecretKey string
 }
 
 var cfg gcCfg
@@ -702,14 +703,16 @@ func getGcCfg() (cfg gcCfg, err error) {
 	if !found {
 		cfg.Peers = append(cfg.Peers, cfg.MyIPAddr)
 	}
-
+	
+	SECRET = cfg.SecretKey
+	fmt.Printf("load secret key successfully %s\n", SECRET)
 	return
 }
 
 func main() {
 	/* pid */
 	if err := CreatePidfile(PIDFILE); err != nil {
-		fmt.Printf("can not create pid file %s\n", PIDFILE)
+		fmt.Printf("can not create pid file %s\n", PIDFILE) 
 		return
 	}
 	defer RemovePidfile(PIDFILE)
@@ -723,7 +726,7 @@ func main() {
 	defer f.Close()
 
 	m := martini.Classic()
-	m.Use(AuthMe(SECRET))
+	
 	slog = log.New(f, "[wuzei]", log.LstdFlags)
 	m.Map(slog)
 
@@ -733,6 +736,8 @@ func main() {
 		return
 	}
 
+	m.Use(AuthMe(SECRET))
+	
 	wugui.InitCachePool(cfg.MyIPAddr, cfg.Peers, cfg.Port)
 	slog.Printf("Config of group cache: %+v\n", cfg)
 

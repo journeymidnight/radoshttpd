@@ -8,5 +8,6 @@
     "ListenPort":3000,
     "Peers": ["127.0.0.1"],
     "SocketTimeout": 90,
-    "QueueLength":300
+    "QueueLength":300,
+    "SecretKey": "wuzei"
 }

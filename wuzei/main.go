@@ -26,7 +26,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
-
+	"bufio"
 
 	"bitbucket.org/wenjianhn/chunkaligned"
 	"bitbucket.org/wenjianhn/wugui"
@@ -35,6 +35,7 @@ import (
 var (
 	LOGPATH                    = "/var/log/wuzei/wuzei.log"
 	PIDFILE                    = "/var/run/wuzei/wuzei.pid"
+	WHITELISTPATH              = "/etc/wuzei/whitelist"
 	QUEUETIMEOUT time.Duration = 5 /* seconds */
 	MONTIMEOUT                 = "30"
 	OSDTIMEOUT                 = "60"
@@ -52,7 +53,78 @@ var (
 	conn     *rados.Conn
 	ReqQueue RequestQueue
 	wg       sync.WaitGroup
+	/* IP address which could access anytime */
+	/* ignore any line prefixed by # */
+	whiteList map[string]int
+	/* blocked object list */
+	blackList *SafeMap
+	urlRecord *URLRecord
 )
+
+
+type Record struct {
+	last_access_time time.Time
+	num_of_access int
+	pos_in_list *list.Element
+}
+
+type URLRecord struct {
+	records map[string] *Record
+	lock * sync.Mutex
+	evictList *list.List
+	max_record_size int
+}
+
+func NewURLRecord() *URLRecord {
+	r := make(map[string] *Record)
+	l := new(sync.Mutex)
+	e := list.New()
+	size := 1000
+
+	return &URLRecord{r,l,e,size}
+}
+
+func (url_record *URLRecord) update_and_check(url string) bool {
+	url_record.lock.Lock()
+	defer url_record.lock.Unlock()
+	var we_are_attacked bool = false
+	var entry *Record
+	var ok bool
+	current_time := time.Now()
+	//Has record
+	if entry, ok = url_record.records[url]; ok {
+		//new request within 10s
+		if entry.last_access_time.Add(10 * time.Second).After(current_time)  {
+			entry.num_of_access += 1
+			if entry.num_of_access > 5 {
+				we_are_attacked = true
+			}
+		//new request outof 10s, re-caculate the time
+		} else {
+			entry.num_of_access = 1
+			entry.last_access_time = current_time
+		}
+		//update ElevictList
+		url_record.evictList.MoveToFront(entry.pos_in_list)
+	//Add new record 
+	} else {
+		new_entry := &Record{current_time, 1, nil}
+		var pos *list.Element = url_record.evictList.PushFront(url)
+		//After new_entry is inserted into list, put its pointer to entry it self
+		new_entry.pos_in_list = pos
+		url_record.records[url] = new_entry
+	}
+
+	//evicte old map
+	if url_record.evictList.Len() > url_record.max_record_size {
+		element := url_record.evictList.Back()
+		url = url_record.evictList.Remove(element).(string)
+		slog.Println("deleting old entry %s", url)
+		delete(url_record.records, url)
+	}
+
+	return we_are_attacked;
+}
 
 type RadosDownloader struct {
 	striper       *rados.StriperPool
@@ -164,6 +236,46 @@ func AuthMe(key string) martini.Handler {
 	}
 }
 
+//any object is retrived too many times, block all the request except whiteList
+//return false to let request go
+//return true to block request
+func DDosProtect(w http.ResponseWriter, r *http.Request) bool{
+
+		remote_addr_parts := strings.Split(r.RemoteAddr, ":")
+		remote_addr := remote_addr_parts[0]
+
+		if _, ok := whiteList[remote_addr]; ok{
+			return false
+		}
+
+		url := r.RequestURI
+		slog.Println(url)
+
+		if blackList.Check(url) {
+			slog.Printf("see %s again, block it", url)
+			rejectConnection(w)
+			return true
+		} else if urlRecord.update_and_check(url){
+			slog.Printf("start to block %s", url)
+			blackList.Set(url, time.Now())
+			rejectConnection(w)
+			return true
+		} else {
+			return false
+		}
+}
+
+func rejectConnection(w http.ResponseWriter){
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			slog.Println("webserver doesn't support hijacking")
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		conn.Close()
+}
 
 func isCacheable(size int64) bool {
 	// NOTE(wenjianhn): only cache small files now
@@ -176,6 +288,10 @@ func isCacheable(size int64) bool {
 }
 
 func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
+
+	if DDosProtect(w,r) {
+		return
+	}
 
 	/* used for graceful stop */
 	wg.Add(1)
@@ -703,7 +819,6 @@ func getGcCfg() (cfg gcCfg, err error) {
 	if !found {
 		cfg.Peers = append(cfg.Peers, cfg.MyIPAddr)
 	}
-	
 	SECRET = cfg.SecretKey
 	fmt.Printf("load secret key successfully %s\n", SECRET)
 	return
@@ -725,8 +840,43 @@ func main() {
 	}
 	defer f.Close()
 
+
+
+	whiteList = make(map[string]int)
+	// initial white list
+	f_whitelist, err := os.OpenFile(WHITELISTPATH, os.O_RDONLY, 0666)
+	if err != nil {
+		fmt.Println("failed to open whitelist")
+		f_whitelist.Close()
+	}
+	scanner := bufio.NewScanner(f_whitelist)
+	var line string
+	for scanner.Scan() {
+		line = scanner.Text()
+		//put whitelist in map
+		fmt.Printf("put %s into whitelist\n", line)
+		whiteList[line] = 0
+	}
+	f_whitelist.Close()
+
+	blackList = NewSafeMap()
+	urlRecord = NewURLRecord()
+
+	//if blacklist is long, it will be slow
+	go func(){
+		//v is the inserted time
+		current_time := time.Now()
+		for {
+			time.Sleep(time.Hour * 24)
+			for k, v := range blackList.Items() {
+				if v.(time.Time).Add(time.Hour * 24).After(current_time) {
+					blackList.Delete(k)
+				}
+			}
+		}
+	}()
+
 	m := martini.Classic()
-	
 	slog = log.New(f, "[wuzei]", log.LstdFlags)
 	m.Map(slog)
 
@@ -737,7 +887,7 @@ func main() {
 	}
 
 	m.Use(AuthMe(SECRET))
-	
+
 	wugui.InitCachePool(cfg.MyIPAddr, cfg.Peers, cfg.Port)
 	slog.Printf("Config of group cache: %+v\n", cfg)
 

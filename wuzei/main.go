@@ -37,7 +37,7 @@ var (
 	PIDFILE                    = "/var/run/wuzei/wuzei.pid"
 	QUEUETIMEOUT time.Duration = 5 /* seconds */
 	MONTIMEOUT                 = "30"
-	OSDTIMEOUT                 = "30"
+	OSDTIMEOUT                 = "60"
 	BUFFERSIZE                 = 4 << 20 /* 4M */
 	AIOCONCURRENT              = 4
 	MAX_CHUNK_SIZE             = BUFFERSIZE * 2
@@ -80,6 +80,7 @@ func (rd *RadosDownloader) Read(p []byte) (n int, err error) {
 		}
 		/* Timeout or read error occurs */
 		if err != nil {
+			slog.Println("timeout when reading ceph object");
 			return count, errors.New("Timeout or Read Error")
 		}
 		rd.offset += int64(count)
@@ -98,7 +99,6 @@ func (rd *RadosDownloader) Read(p []byte) (n int, err error) {
 		return rd.waterhighmark - rd.waterlowmark, nil
 	}
 
-	return 0, errors.New("read failed")
 }
 
 func (rd *RadosDownloader) Seek(offset int64, whence int) (int64, error) {

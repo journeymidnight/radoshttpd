@@ -892,9 +892,9 @@ func main() {
 			//v is the inserted time
 			current_time := time.Now()
 			for {
-				time.Sleep(time.Hour * 24)
+				time.Sleep(time.Minute * 60)
 				for k, v := range blackList.Items() {
-					if v.(time.Time).Add(time.Hour * 24).After(current_time) {
+					if v.(time.Time).Add(time.Minute * 60).After(current_time) {
 						blackList.Delete(k)
 					}
 				}

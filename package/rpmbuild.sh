@@ -15,6 +15,7 @@ git archive --format=tar --prefix=${PACKAGENAME}-${VER}-${REL}/ HEAD | gzip -c >
 
 # Copy Configuration file
 cp package/wuzei.json $RPMTOPDIR/SOURCES/
+cp package/whitelist $RPMTOPDIR/SOURCES/
 
 # Convert git log to RPM's ChangeLog format (shown with rpm -qp --changelog <rpm file>)
 sed -e "s/%{ver}/$VER/" -e "s/%{rel}/$REL/" $GITROOT/package/${PACKAGENAME}.spec > $RPMTOPDIR/SPECS/${PACKAGENAME}.spec

@@ -19,6 +19,7 @@ install:
 	install -D build/bin/wuzei $$DESTDIR/usr/bin/wuzei
 	install -d -m 755 $$DESTDIR/etc/wuzei
 	install -p -D -m 640 package/wuzei.json $$DESTDIR/etc/wuzei/
+	install -p -D -m 640 package/whitelist $$DESTDIR/etc/wuzei/
 	install -m 0755 scripts/wuzei.sh -D $$DESTDIR/etc/init.d/wuzei
 	install -D -m 0644 scripts/wuzei.logrotate $$DESTDIR/etc/logrotate.d/wuzei
 

@@ -47,6 +47,7 @@ rm -rf %{buildroot}
 %defattr(-,root,root,-)
 %{_bindir}/wuzei
 %config(noreplace) /etc/wuzei/wuzei.json
+%config(noreplace) /etc/wuzei/whitelist
 /etc/init.d/wuzei
 /etc/logrotate.d/wuzei
 %dir /var/run/wuzei/

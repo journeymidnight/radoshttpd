@@ -94,9 +94,9 @@ func (url_record *URLRecord) update_and_check(url string) bool {
 	//Has record
 	if entry, ok = url_record.records[url]; ok {
 		//new request within 10s
-		if entry.last_access_time.Add(10 * time.Second).After(current_time)  {
+		if entry.last_access_time.Add(time.Duration(cfg.ThrottleInterval) * time.Second).After(current_time)  {
 			entry.num_of_access += 1
-			if entry.num_of_access > 5 {
+			if entry.num_of_access > cfg.ThrottleNums {
 				we_are_attacked = true
 			}
 		//new request outof 10s, re-caculate the time
@@ -117,10 +117,14 @@ func (url_record *URLRecord) update_and_check(url string) bool {
 
 	//evicte old map
 	if url_record.evictList.Len() > url_record.max_record_size {
-		element := url_record.evictList.Back()
-		url = url_record.evictList.Remove(element).(string)
-		slog.Println("deleting old entry %s", url)
-		delete(url_record.records, url)
+		i := 0
+		for i < url_record.max_record_size / 2 {
+			element := url_record.evictList.Back()
+			url = url_record.evictList.Remove(element).(string)
+			slog.Println("evict old entry %s", url)
+			delete(url_record.records, url)
+			i ++
+		}
 	}
 
 	return we_are_attacked;
@@ -249,14 +253,10 @@ func DDosProtect(w http.ResponseWriter, r *http.Request) bool{
 		}
 
 		url := r.RequestURI
-		slog.Println(url)
-
 		if blackList.Check(url) {
-			slog.Printf("see %s again, block it", url)
 			rejectConnection(w)
 			return true
 		} else if urlRecord.update_and_check(url){
-			slog.Printf("start to block %s", url)
 			blackList.Set(url, time.Now())
 			rejectConnection(w)
 			return true
@@ -269,6 +269,7 @@ func rejectConnection(w http.ResponseWriter){
 		hj, ok := w.(http.Hijacker)
 		if !ok {
 			slog.Println("webserver doesn't support hijacking")
+			return
 		}
 		conn, _, err := hj.Hijack()
 		if err != nil {
@@ -289,7 +290,8 @@ func isCacheable(size int64) bool {
 
 func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 
-	if DDosProtect(w,r) {
+	if cfg.DDos && DDosProtect(w,r) {
+		slog.Printf("See %s, Blacklist it", r.URL)
 		return
 	}
 
@@ -790,6 +792,9 @@ type gcCfg struct {
 	SocketTimeout int
 	QueueLength int
 	SecretKey string
+	DDos bool
+	ThrottleInterval int
+	ThrottleNums int
 }
 
 var cfg gcCfg
@@ -799,6 +804,7 @@ func getGcCfg() (cfg gcCfg, err error) {
 
 	f, err := os.Open("/etc/wuzei/wuzei.json")
 	if err != nil {
+		slog.Println("Parse wuzei.json failed")
 		return
 	}
 	defer f.Close()
@@ -806,6 +812,7 @@ func getGcCfg() (cfg gcCfg, err error) {
 	err = json.NewDecoder(f).Decode(&cfg)
 	if err != nil {
 		err = errors.New("failed to parse wuzei.json: " + err.Error())
+		slog.Println("Parse wuzei.json failed")
 		return
 	}
 
@@ -820,6 +827,14 @@ func getGcCfg() (cfg gcCfg, err error) {
 		cfg.Peers = append(cfg.Peers, cfg.MyIPAddr)
 	}
 	SECRET = cfg.SecretKey
+
+	if cfg.DDos {
+		slog.Printf("Support DDos protect, any object will be blocked when accessing %d in %d seconds", cfg.ThrottleNums, cfg.ThrottleInterval)
+	} else {
+		slog.Printf("No DDos protect")
+
+	}
+
 	fmt.Printf("load secret key successfully %s\n", SECRET)
 	return
 }
@@ -841,41 +856,6 @@ func main() {
 	defer f.Close()
 
 
-
-	whiteList = make(map[string]int)
-	// initial white list
-	f_whitelist, err := os.OpenFile(WHITELISTPATH, os.O_RDONLY, 0666)
-	if err != nil {
-		fmt.Println("failed to open whitelist")
-		f_whitelist.Close()
-	}
-	scanner := bufio.NewScanner(f_whitelist)
-	var line string
-	for scanner.Scan() {
-		line = scanner.Text()
-		//put whitelist in map
-		fmt.Printf("put %s into whitelist\n", line)
-		whiteList[line] = 0
-	}
-	f_whitelist.Close()
-
-	blackList = NewSafeMap()
-	urlRecord = NewURLRecord()
-
-	//if blacklist is long, it will be slow
-	go func(){
-		//v is the inserted time
-		current_time := time.Now()
-		for {
-			time.Sleep(time.Hour * 24)
-			for k, v := range blackList.Items() {
-				if v.(time.Time).Add(time.Hour * 24).After(current_time) {
-					blackList.Delete(k)
-				}
-			}
-		}
-	}()
-
 	m := martini.Classic()
 	slog = log.New(f, "[wuzei]", log.LstdFlags)
 	m.Map(slog)
@@ -884,6 +864,42 @@ func main() {
 	if err != nil {
 		slog.Println(err.Error())
 		return
+	}
+
+	if cfg.DDos {
+		whiteList = make(map[string]int)
+		// initial white list
+		f_whitelist, err := os.OpenFile(WHITELISTPATH, os.O_RDONLY, 0666)
+		if err != nil {
+			fmt.Println("failed to open whitelist")
+			f_whitelist.Close()
+		}
+		scanner := bufio.NewScanner(f_whitelist)
+		var line string
+		for scanner.Scan() {
+			line = scanner.Text()
+			//put whitelist in map
+			slog.Printf("Put %s into whitelist", line)
+			whiteList[line] = 0
+		}
+		f_whitelist.Close()
+
+		blackList = NewSafeMap()
+		urlRecord = NewURLRecord()
+
+		//if blacklist is long, it will be slow
+		go func(){
+			//v is the inserted time
+			current_time := time.Now()
+			for {
+				time.Sleep(time.Hour * 24)
+				for k, v := range blackList.Items() {
+					if v.(time.Time).Add(time.Hour * 24).After(current_time) {
+						blackList.Delete(k)
+					}
+				}
+			}
+		}()
 	}
 
 	m.Use(AuthMe(SECRET))

@@ -2,12 +2,15 @@
     "Name": "objcache.wuzei",
     "CacheSizeMBytes": 1024,
     "CacheChunkSizeKBytes": 2048,
-    "CacheMaxObjectSizeKBytes": 4096,
+    "CacheMaxObjectSizeKBytes": 0,
     "MyIPAddr": "127.0.0.1",
     "Port": 10946,
-    "ListenPort":3000,
+    "ListenPort":8080,
     "Peers": ["127.0.0.1"],
     "SocketTimeout": 90,
     "QueueLength":300,
-    "SecretKey": "wuzei"
+    "SecretKey": "wuzei",
+    "ThrottleInterval": 60,
+    "ThrottleNums": 30,
+    "DDos":true
 }

@@ -835,7 +835,6 @@ func getGcCfg() (cfg gcCfg, err error) {
 
 	}
 
-	fmt.Printf("load secret key successfully %s\n", SECRET)
 	return
 }
 
@@ -951,8 +950,14 @@ func main() {
 	m.Get("/calcmd5/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", Md5sumHandler)
 	m.Get("/blocksize",BlockHandler)
 
-	sl,_ := nettimeout.NewListener(cfg.ListenPort, time.Duration(cfg.SocketTimeout) * time.Second, 
+	sl, err := nettimeout.NewListener(cfg.ListenPort, time.Duration(cfg.SocketTimeout) * time.Second,
 						time.Duration(cfg.SocketTimeout) * time.Second);
+	if err != nil {
+		fmt.Printf("Failed to listen to %d, quiting\n", cfg.ListenPort)
+		os.Stdout.Sync()
+		slog.Printf("Failed to listen to %d, quiting", cfg.ListenPort)
+		return
+	}
 
 	server := http.Server{}
 	http.HandleFunc("/", m.ServeHTTP)
@@ -962,6 +967,7 @@ func main() {
 		syscall.SIGHUP,
 		syscall.SIGQUIT,
 		syscall.SIGTERM)
+
 	go func() {
 		server.Serve(sl)
 	}()

@@ -22,5 +22,5 @@ if [[ $? -ne  0 ]] ;then
 	echo "try to install sshpass first"
 	exit
 fi
-$sshpasspath -p Myiaas.chensh.net scp $1 chensh@$repo:$remotedir/x86_64
-$sshpasspath -p Myiaas.chensh.net ssh chensh@$repo createrepo --update $remotedir
+$sshpasspath -p Myiaas.chensh.net scp $1 root@$repo:$remotedir/x86_64
+$sshpasspath -p Myiaas.chensh.net ssh root@$repo createrepo --update $remotedir

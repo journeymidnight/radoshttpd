@@ -139,6 +139,23 @@ type RadosDownloader struct {
 	waterlowmark  int
 }
 
+type SimpleRadosDownloader struct {
+	*RadosDownloader
+}
+
+func (rd *SimpleRadosDownloader) Read(p []byte) (n int, err error) {
+	count, err := rd.RadosDownloader.striper.Read(rd.RadosDownloader.soid, p, uint64(rd.RadosDownloader.offset))
+	if count == 0 {
+		return 0, io.EOF
+	}
+	rd.RadosDownloader.offset += int64(count)
+	return count, err
+}
+
+func (rd *SimpleRadosDownloader) Seek(offset int64, whence int) (int64, error) {
+	return rd.RadosDownloader.Seek(offset, whence)
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -345,10 +362,8 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 		return
         }
 
-	/* use 4M buffer to read */
-	buffersize := BUFFERSIZE
-	// TODO use sync.Pool 
-	rd := RadosDownloader{&striper, soid, 0, make([]byte, buffersize), 0, 0}
+	rd := RadosDownloader{&striper, soid, 0, nil, 0, 0}
+	srd := &SimpleRadosDownloader{&rd}
 
 	/* set let ServerContent to detect file type  */
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -356,7 +371,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", size))
 
 	/* set the stream */
-	http.ServeContent(w, r, filename, time.Now(), &rd)
+	ServeContent(w, r, filename, srd)
 }
 
 func BlockHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {

@@ -121,7 +121,7 @@ func (url_record *URLRecord) update_and_check(url string) bool {
 		for i < url_record.max_record_size / 2 {
 			element := url_record.evictList.Back()
 			url = url_record.evictList.Remove(element).(string)
-			slog.Println("evict old entry %s", url)
+			slog.Printf("evict old entry %s", url)
 			delete(url_record.records, url)
 			i ++
 		}

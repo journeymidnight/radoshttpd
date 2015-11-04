@@ -1,0 +1,6 @@
+[gerrit]
+host=review.et.letv.com
+port=29418
+project=iaas/ceph/radoshttpd
+defaultbranch=master
+

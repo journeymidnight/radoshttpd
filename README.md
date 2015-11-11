@@ -1,3 +1,8 @@
+# 基本操作
+
+参考api.markdown
+
+
 # Cache
 
 基于 [Groupcache](https://github.com/golang/groupcache) 实现。

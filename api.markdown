@@ -35,7 +35,7 @@
 
 	GET /{poolname}/{objectname}
 	Option Headers:
-	Range: bytes xx-xx
+	Range: bytes=xx-xx
 	
 	Example:
 	curl -o output http://wuzei/{poolname}/{objectname}

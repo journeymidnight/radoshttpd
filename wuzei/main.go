@@ -874,6 +874,12 @@ func main() {
 	slog = log.New(f, "[wuzei]", log.LstdFlags)
 	m.Map(slog)
 
+
+    //Redirect stdout and stderr to the log
+    syscall.Dup2(int(f.Fd()), 2)
+    syscall.Dup2(int(f.Fd()), 1)
+
+
 	cfg, err = getGcCfg()
 	if err != nil {
 		slog.Println(err.Error())

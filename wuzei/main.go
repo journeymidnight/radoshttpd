@@ -1039,5 +1039,8 @@ func ErrorHandler(w http.ResponseWriter, r *http.Request, status int) {
 	case http.StatusInternalServerError:
 		w.WriteHeader(status)
 		w.Write([]byte("Internal Server Error"))
+	default:
+		w.WriteHeader(status)
+		w.Write([]byte("error"))
 	}
 }

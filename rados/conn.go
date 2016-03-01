@@ -259,3 +259,16 @@ func (c *Conn) DeletePool(name string) error {
         return RadosError(ret)
     }
 }
+
+func (c *Conn) Status() (string, error) {
+    c_cmd := C.CString("{\"prefix\":\"pg stat\"}")
+    var c_buf *C.char = nil
+    var c_buf_len C.size_t= 0
+    ret := C.rados_mon_command(c.cluster, &c_cmd, 1, nil, 0, &c_buf, &c_buf_len, nil, nil)
+    defer C.free(unsafe.Pointer(c_buf))
+    if ret == 0 {
+        return C.GoStringN(c_buf, C.int(c_buf_len)), nil
+    } else {
+        return "", RadosError(ret)
+    }
+}

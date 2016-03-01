@@ -27,7 +27,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"bufio"
-
 	"bitbucket.org/wenjianhn/chunkaligned"
 	"bitbucket.org/wenjianhn/wugui"
 )
@@ -474,6 +473,15 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 
 	s := hex.EncodeToString(b)
 	w.Write([]byte(fmt.Sprintf("{\"md5\":\"%s\"}", s)))
+}
+
+func CephStatusHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
+    c, err := conn.Status()
+    if err != nil{
+		    ErrorHandler(w, r, 504)
+            return
+    }
+	w.Write([]byte(c))
 }
 
 func InfoHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
@@ -970,6 +978,7 @@ func main() {
 	m.Get("/info/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", InfoHandler)
 	m.Get("/calcmd5/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", Md5sumHandler)
 	m.Get("/blocksize",BlockHandler)
+	m.Get("/cephstatus",CephStatusHandler)
 
 	sl, err := nettimeout.NewListener(cfg.ListenPort, time.Duration(cfg.SocketTimeout) * time.Second,
 						time.Duration(cfg.SocketTimeout) * time.Second);

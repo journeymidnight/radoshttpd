@@ -43,7 +43,7 @@ var (
 	MAX_CHUNK_SIZE             = BUFFERSIZE * 2
 
 	STRIPE_UNIT		   = uint(512 << 10) /* 512K */
-	OBJECT_SIZE                = uint(64 << 20) /* 64M */
+	OBJECT_SIZE                = uint(16 << 20) /* 16M */
 	STRIPE_COUNT               = uint(4)
 	SECRET                     = ""
 

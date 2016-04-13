@@ -48,8 +48,7 @@ var (
 	SECRET                     = ""
 
 	/* global variables */
-	slog     *log.Logger
-	conn     *rados.Conn
+	slog  *log.Logger
 	ReqQueue RequestQueue
 	wg       sync.WaitGroup
 	/* IP address which could access anytime */
@@ -220,8 +219,8 @@ type RequestQueue struct {
 	slots chan bool
 }
 
-func (r *RequestQueue) Init() {
-	r.slots = make(chan bool, cfg.QueueLength)
+func (r *RequestQueue) Init(queueLength int) {
+	r.slots = make(chan bool, queueLength)
 }
 
 func (r *RequestQueue) inc() error {
@@ -256,10 +255,11 @@ func AuthMe(key string) martini.Handler {
 	}
 }
 
+
 //any object is retrived too many times, block all the request except whiteList
 //return false to let request go
 //return true to block request
-func DDosProtect(w http.ResponseWriter, r *http.Request) bool{
+func DDosProtect(w http.ResponseWriter, r *http.Request, conn *rados.Conn) bool{
 
 		remote_addr_parts := strings.Split(r.RemoteAddr, ":")
 		remote_addr := remote_addr_parts[0]
@@ -304,22 +304,32 @@ func isCacheable(size int64) bool {
 	return false
 }
 
-func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 
-	if cfg.DDos && DDosProtect(w,r) {
+
+func RequestLimit() martini.Handler {
+	return func(w http.ResponseWriter, r *http.Request, c martini.Context){
+        /* used for graceful stop */
+		wg.Add(1)
+		defer wg.Done()
+
+        /* limit the max request */
+		if err := ReqQueue.inc(); err != nil {
+			slog.Println("URL:", r.URL, ", request timeout")
+			ErrorHandler(w, r, http.StatusRequestTimeout)
+			return
+		}
+		defer ReqQueue.dec()
+		c.Next()
+	}
+}
+
+func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn) {
+    
+	if cfg.DDos && DDosProtect(w,r,conn) {
 		slog.Printf("See %s, Blacklist it", r.URL)
 		return
 	}
 
-	/* used for graceful stop */
-	wg.Add(1)
-	defer wg.Done()
-	if err := ReqQueue.inc(); err != nil {
-		slog.Println("URL:", r.URL, ", request timeout")
-		ErrorHandler(w, r, http.StatusRequestTimeout)
-		return
-	}
-	defer ReqQueue.dec()
 
 	poolname := params["pool"]
 	soid := params["soid"]
@@ -357,7 +367,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 		}
 
 		readSeeker := io.NewSectionReader(content, 0, content.Size())
-		http.ServeContent(w, r, filename, time.Now(), readSeeker)
+		ServeContent(w, r, filename, readSeeker)
 		return
         }
 
@@ -370,6 +380,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", size))
 
 	/* set the stream */
+    /* here we need more data */
 	ServeContent(w, r, filename, srd)
 }
 
@@ -378,17 +389,7 @@ func BlockHandler(params martini.Params, w http.ResponseWriter, r *http.Request)
 }
 
 
-func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
-	/* used for graceful stop */
-	wg.Add(1)
-	defer wg.Done()
-
-	if err := ReqQueue.inc(); err != nil {
-		slog.Println("URL:", r.URL, "request timeout")
-		ErrorHandler(w, r, http.StatusRequestTimeout)
-		return
-	}
-	defer ReqQueue.dec()
+func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn) {
 
 	poolname := params["pool"]
 	soid := params["soid"]
@@ -475,7 +476,7 @@ func Md5sumHandler(params martini.Params, w http.ResponseWriter, r *http.Request
 	w.Write([]byte(fmt.Sprintf("{\"md5\":\"%s\"}", s)))
 }
 
-func CephStatusHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
+func CephStatusHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn) {
     c, err := conn.Status()
     if err != nil{
 		    ErrorHandler(w, r, 504)
@@ -484,18 +485,7 @@ func CephStatusHandler(params martini.Params, w http.ResponseWriter, r *http.Req
 	w.Write([]byte(c))
 }
 
-func InfoHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
-	/* used for graceful stop */
-	wg.Add(1)
-	defer wg.Done()
-
-	if err := ReqQueue.inc(); err != nil {
-		slog.Println("URL:", r.URL, "request timeout")
-		ErrorHandler(w, r, http.StatusRequestTimeout)
-		return
-	}
-	defer ReqQueue.dec()
-
+func InfoHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn) {
 	poolname := params["pool"]
 	soid := params["soid"]
 	pool, err := conn.OpenPool(poolname)
@@ -526,16 +516,7 @@ func InfoHandler(params martini.Params, w http.ResponseWriter, r *http.Request) 
 	return
 }
 
-func DeleteHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
-	/* used for graceful stop */
-	wg.Add(1)
-	defer wg.Done()
-	if err := ReqQueue.inc(); err != nil {
-		slog.Println("URL:", r.URL, "request timeout")
-		ErrorHandler(w, r, http.StatusRequestTimeout)
-		return
-	}
-	defer ReqQueue.dec()
+func DeleteHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn) {
 
 	poolname := params["pool"]
 	soid := params["soid"]
@@ -614,16 +595,7 @@ func set_stripe_layout(p * rados.StriperPool) int{
 	return ret
 }
 
-func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
-
-	wg.Add(1)
-	defer wg.Done()
-	if err := ReqQueue.inc(); err != nil {
-		slog.Println("URL:", r.URL, "request timeout")
-		ErrorHandler(w, r, http.StatusRequestTimeout)
-		return
-	}
-	defer ReqQueue.dec()
+func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn) {
 
 	poolname := params["pool"]
 	soid := params["soid"]
@@ -862,6 +834,9 @@ func getGcCfg() (cfg gcCfg, err error) {
 }
 
 func main() {
+
+	var conn  *rados.Conn
+
 	/* pid */
 	if err := CreatePidfile(PIDFILE); err != nil {
 		fmt.Printf("can not create pid file %s\n", PIDFILE) 
@@ -960,8 +935,9 @@ func main() {
 		return
 	}
 	defer conn.Shutdown()
+    m.Use(conn)
 
-	ReqQueue.Init()
+	ReqQueue.Init(cfg.QueueLength)
 
 	m.Get("/whoareyou", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("I AM WUZEI"))
@@ -972,11 +948,11 @@ func main() {
 	})
 
 	/* resume upload protocal is based on http://www.grid.net.ru/nginx/resumable_uploads.en.html */
-	m.Put("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", PutHandler)
-	m.Delete("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", DeleteHandler)
-	m.Get("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", GetHandler)
-	m.Get("/info/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", InfoHandler)
-	m.Get("/calcmd5/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", Md5sumHandler)
+	m.Put("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, PutHandler)
+	m.Delete("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, DeleteHandler)
+	m.Get("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, GetHandler)
+	m.Get("/info/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, InfoHandler)
+	m.Get("/calcmd5/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, Md5sumHandler)
 	m.Get("/blocksize",BlockHandler)
 	m.Get("/cephstatus",CephStatusHandler)
 

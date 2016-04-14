@@ -13,7 +13,7 @@ import (
 
 
 
-func ServeContent(w http.ResponseWriter, req *http.Request, name string, content io.ReadSeeker) {
+func ServeContent(w http.ResponseWriter, req *http.Request, name string, content io.ReadSeeker, counter * BytesCounter) {
 	sizeFunc := func() (int64, error) {
 		size, err := content.Seek(0, os.SEEK_END)
 		if err != nil {
@@ -25,7 +25,7 @@ func ServeContent(w http.ResponseWriter, req *http.Request, name string, content
 		}
 		return size, nil
 	}
-	serveContent(w, req, name, sizeFunc, content)
+	serveContent(w, req, name, sizeFunc, content, counter)
 }
 
 
@@ -41,7 +41,7 @@ var errSeeker = errors.New("seeker can't seek")
 // content must be seeked to the beginning of the file.
 // The sizeFunc is called at most once. Its error, if any, is sent in the HTTP response.
 // ignore all browser cache method including etag and modtime
-func serveContent(w http.ResponseWriter, r *http.Request, name string, sizeFunc func() (int64, error), content io.ReadSeeker) {
+func serveContent(w http.ResponseWriter, r *http.Request, name string, sizeFunc func() (int64, error), content io.ReadSeeker, counter *BytesCounter) {
 
 	code := http.StatusOK
 
@@ -110,6 +110,7 @@ func serveContent(w http.ResponseWriter, r *http.Request, name string, sizeFunc 
 			sendContent = pr
 			defer pr.Close() // cause writing goroutine to fail and exit if CopyN doesn't finish.
 			go func() {
+				var bytesNum int64 = 0
 				for _, ra := range ranges {
 					part, err := mw.CreatePart(ra.mimeHeader(ctype, size))
 					if err != nil {
@@ -120,10 +121,13 @@ func serveContent(w http.ResponseWriter, r *http.Request, name string, sizeFunc 
 						pw.CloseWithError(err)
 						return
 					}
-					if _, err := MYCopyN(part, content, ra.length); err != nil {
+					bytesNum = 0
+					bytesNum, err = MYCopyN(part, content, ra.length)
+					if err != nil {
 						pw.CloseWithError(err)
 						return
 					}
+					counter.byteSend += bytesNum
 				}
 				mw.Close()
 				pw.Close()
@@ -139,7 +143,7 @@ func serveContent(w http.ResponseWriter, r *http.Request, name string, sizeFunc 
 	w.WriteHeader(code)
 
 	if r.Method != "HEAD" {
-		MYCopyN(w, sendContent, sendSize)
+		counter.byteSend, _ = MYCopyN(w, sendContent, sendSize)
 	}
 }
 

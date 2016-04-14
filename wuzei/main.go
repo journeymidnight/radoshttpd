@@ -237,6 +237,10 @@ func (r *RequestQueue) dec() {
 	<-r.slots
 }
 
+func (r *RequestQueue) size() int {
+	return len(r.slots)
+}
+
 //use HMAC
 func AuthMe(key string) martini.Handler {
 	return func(res http.ResponseWriter, req *http.Request, c martini.Context) {
@@ -252,6 +256,15 @@ func AuthMe(key string) martini.Handler {
 			slog.Println("URL:", req.URL, "expected key is %s, but received key is %s", expected, auth);
 			ErrorHandler(res, req, http.StatusUnauthorized)
 		}
+	}
+}
+
+
+
+func WrapBytesCounter() martini.Handler {
+	return func(res http.ResponseWriter, req *http.Request, c martini.Context) {
+		r := &BytesCounter{0}
+		c.Map(r)
 	}
 }
 
@@ -323,7 +336,7 @@ func RequestLimit() martini.Handler {
 	}
 }
 
-func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn) {
+func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn, counter *BytesCounter) {
     
 	if cfg.DDos && DDosProtect(w,r,conn) {
 		slog.Printf("See %s, Blacklist it", r.URL)
@@ -367,9 +380,9 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request, c
 		}
 
 		readSeeker := io.NewSectionReader(content, 0, content.Size())
-		ServeContent(w, r, filename, readSeeker)
+		ServeContent(w, r, filename, readSeeker, counter)
 		return
-        }
+    }
 
 	rd := RadosDownloader{&striper, soid, 0, nil, 0, 0}
 	srd := &SimpleRadosDownloader{&rd}
@@ -381,7 +394,7 @@ func GetHandler(params martini.Params, w http.ResponseWriter, r *http.Request, c
 
 	/* set the stream */
     /* here we need more data */
-	ServeContent(w, r, filename, srd)
+	ServeContent(w, r, filename, srd, counter)
 }
 
 func BlockHandler(params martini.Params, w http.ResponseWriter, r *http.Request) {
@@ -595,8 +608,7 @@ func set_stripe_layout(p * rados.StriperPool) int{
 	return ret
 }
 
-func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn) {
-
+func PutHandler(params martini.Params, w http.ResponseWriter, r *http.Request, conn *rados.Conn, ) {
 	poolname := params["pool"]
 	soid := params["soid"]
 	pool, err := conn.OpenPool(poolname)
@@ -833,6 +845,11 @@ func getGcCfg() (cfg gcCfg, err error) {
 	return
 }
 
+
+type BytesCounter struct {
+	byteSend int64
+}
+
 func main() {
 
 	var conn  *rados.Conn
@@ -855,7 +872,6 @@ func main() {
 
 	m := martini.Classic()
 	slog = log.New(f, "[wuzei]", log.LstdFlags)
-	m.Map(slog)
 
 
     //Redirect stdout and stderr to the log
@@ -906,6 +922,20 @@ func main() {
 	}
 
 	m.Use(AuthMe(SECRET))
+	m.Use(WrapBytesCounter())
+	m.Use(func(w http.ResponseWriter, r *http.Request, conn *rados.Conn, counter *BytesCounter, c martini.Context){
+    start := time.Now()
+	addr := r.Header.Get("X-Real-IP")
+	if addr == "" {
+		addr = r.Header.Get("X-Forwarded-For")
+	if addr == "" {
+		addr = r.RemoteAddr
+	}
+	c.Next()
+    rw := w.(martini.ResponseWriter)
+    slog.Printf("COMPLETE %s %s %s %v %d in %s\n", addr, r.Method, r.URL.Path, rw.Status(), counter.byteSend, time.Since(start))
+    }})
+
 
 	wugui.InitCachePool(cfg.MyIPAddr, cfg.Peers, cfg.Port)
 	slog.Printf("Config of group cache: %+v\n", cfg)
@@ -935,7 +965,8 @@ func main() {
 		return
 	}
 	defer conn.Shutdown()
-    m.Use(conn)
+
+    m.Map(conn)
 
 	ReqQueue.Init(cfg.QueueLength)
 
@@ -947,12 +978,16 @@ func main() {
 		fmt.Fprint(w, fmt.Sprintf("%+v\n", wugui.GetRadosCacheStats()))
 	})
 
+	m.Get("/threads", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, fmt.Sprintf("%d\n", ReqQueue.size()))
+	})
+
 	/* resume upload protocal is based on http://www.grid.net.ru/nginx/resumable_uploads.en.html */
-	m.Put("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, PutHandler)
-	m.Delete("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, DeleteHandler)
-	m.Get("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, GetHandler)
-	m.Get("/info/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, InfoHandler)
-	m.Get("/calcmd5/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit, Md5sumHandler)
+	m.Put("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit(), PutHandler)
+	m.Delete("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit(), DeleteHandler)
+	m.Get("/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit(), GetHandler)
+	m.Get("/info/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit(), InfoHandler)
+	m.Get("/calcmd5/(?P<pool>[A-Za-z0-9]+)/(?P<soid>[^/]+)", RequestLimit(), Md5sumHandler)
 	m.Get("/blocksize",BlockHandler)
 	m.Get("/cephstatus",CephStatusHandler)
 

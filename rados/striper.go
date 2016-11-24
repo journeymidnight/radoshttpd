@@ -53,6 +53,16 @@ func (sp *StriperPool) State(oid string) (uint64,uint64, error) {
     return uint64(c_psize), uint64(c_ptime), nil
 }
 
+func (sp *StriperPool) Truncate(oid string, uint64 offset) error{
+    c_oid := C.CString(oid)
+    defer C.free(unsafe.Pointer(c_oid))
+	ret := C.rados_striper_truncate(sp.striper, c_oid, C.uint64(offset))
+	if ret < 0 {
+		return RadosError(int(ret))
+	}
+	return nil
+}
+
 func (sp *StriperPool) Delete(oid string) error {
     c_oid := C.CString(oid)
     defer C.free(unsafe.Pointer(c_oid))

@@ -93,6 +93,7 @@ func (p *Pool) Destroy() {
 func (p *Pool) CreateStriper() (StriperPool, error) {
     sp := StriperPool{}
     ret := C.rados_striper_create(p.ioctx, &sp.striper)
+    sp.ioctx = p.ioctx;
     if ret < 0 {
         return sp, RadosError(int(ret))
     } else {

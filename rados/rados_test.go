@@ -262,3 +262,86 @@ func TestWaitForLatestOSDMap(t *testing.T) {
 
     conn.Shutdown()
 }
+
+
+type IoCtxWrapper struct {
+	oid string
+	striper * StriperPool
+	offset int
+}
+
+
+func NewIoCtxWrapper(oid string, striper * StriperPool) *IoCtxWrapper{
+	return &IoCtxWrapper{oid, striper, 0}
+}
+
+func (wrapper *IoCtxWrapper) Write(d []byte) (int, error) {
+
+	n, err := wrapper.striper.Write(wrapper.oid, d, uint64(wrapper.offset))
+
+	if err != nil {
+		return n, err
+	} else {
+		wrapper.offset +=  len(d)
+	}
+	return len(d), err
+
+}
+
+func TestUploadDownloadCheckFile(t * testing.T) {
+
+    conf_file_path := "/etc/ceph/ceph.conf"
+    test_file_path := "./README.md"
+
+    conn, _ := NewConn("admin")
+    err := conn.ReadConfigFile(conf_file_path)
+    assert.NoError(t, err)
+
+    fmt.Println("connecting")
+    err = conn.Connect()
+    assert.NoError(t, err)
+
+
+    poolname := GetUUID()
+    err = conn.MakePool(poolname)
+    assert.NoError(t, err)
+
+
+    pool, err := conn.OpenPool(poolname)
+    assert.NoError(t, err)
+
+    ioctx, err := pool.CreateStriper()
+    assert.NoError(t, err)
+
+    //start to upload
+    file, err := os.Open(test_file_path)
+    assert.NoError(t, err)
+
+
+    ioctx.SetLayoutStripeUnit(512<<10)
+    ioctx.SetLayoutObjectSize(4<<20)
+    ioctx.SetLayoutStripeCount(4)
+
+
+    writer := NewIoCtxWrapper("testoid", &ioctx)
+
+
+    buf  := make([]byte,4<<20)
+    n, err := io.CopyBuffer(writer, file, buf)
+
+    assert.NoError(t, err)
+
+    fmt.Printf("uploaded %d,%v\n", n, err)
+
+    err = ioctx.Delete("testoid")
+
+    assert.NoError(t, err)
+
+
+    file.Close()
+
+    err = conn.DeletePool(poolname)
+    assert.NoError(t, err)
+
+    conn.Shutdown()
+}

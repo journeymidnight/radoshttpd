@@ -5,12 +5,14 @@ package rados
 // #include <stdlib.h>
 // #include <rados/librados.h>
 // #include <radosstriper/libradosstriper.h>
+// #include "force_delete.h"
 import "C"
 
 import "unsafe"
 
 type StriperPool struct {
     striper C.rados_striper_t
+    ioctx   C.rados_ioctx_t
 }
 
 type AioCompletion struct {
@@ -56,7 +58,8 @@ func (sp *StriperPool) State(oid string) (uint64,uint64, error) {
 func (sp *StriperPool) Delete(oid string) error {
     c_oid := C.CString(oid)
     defer C.free(unsafe.Pointer(c_oid))
-    ret := C.rados_striper_remove(sp.striper, c_oid)
+    // ret := C.rados_striper_remove(sp.striper, c_oid) use force remove now
+    ret := C.striprados_remove(sp.ioctx, sp.striper, c_oid);
     if ret < 0 {
       return RadosError(int(ret))
     }

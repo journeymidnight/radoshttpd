@@ -25,6 +25,8 @@ func TestVersion(t *testing.T) {
 
 func TestGetSetConfigOption(t *testing.T) {
     conn, _ := NewConn("admin")
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
 
     // rejects invalid options
     err := conn.SetConfigOption("wefoijweojfiw", "welfkwjelkfj")
@@ -43,6 +45,8 @@ func TestGetSetConfigOption(t *testing.T) {
 
 func TestParseDefaultConfigEnv(t *testing.T) {
     conn, _ := NewConn("admin")
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
 
     log_file_val, _ := conn.GetConfigOption("log_file")
     assert.NotEqual(t, log_file_val, "/dev/null")
@@ -59,7 +63,8 @@ func TestParseDefaultConfigEnv(t *testing.T) {
 
 func TestParseCmdLineArgs(t *testing.T) {
     conn, _ := NewConn("admin")
-    conn.ReadDefaultConfigFile()
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
 
     mon_host_val, _ := conn.GetConfigOption("mon_host")
     assert.NotEqual(t, mon_host_val, "1.1.1.1")
@@ -74,7 +79,8 @@ func TestParseCmdLineArgs(t *testing.T) {
 
 func TestGetClusterStats(t *testing.T) {
     conn, _ := NewConn("admin")
-    conn.ReadDefaultConfigFile()
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
     conn.Connect()
 
     poolname := GetUUID()
@@ -110,7 +116,9 @@ func TestGetClusterStats(t *testing.T) {
 
 func TestGetFSID(t *testing.T) {
     conn, _ := NewConn("admin")
-    conn.ReadDefaultConfigFile()
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
+
     conn.Connect()
 
     fsid, err := conn.GetFSID()
@@ -122,7 +130,8 @@ func TestGetFSID(t *testing.T) {
 
 func TestGetInstanceID(t *testing.T) {
     conn, _ := NewConn("admin")
-    conn.ReadDefaultConfigFile()
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
     conn.Connect()
 
     id := conn.GetInstanceID()
@@ -133,7 +142,9 @@ func TestGetInstanceID(t *testing.T) {
 
 func TestMakeDeletePool(t *testing.T) {
     conn, _ := NewConn("admin")
-    conn.ReadDefaultConfigFile()
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
+
     conn.Connect()
 
     // get current list of pool
@@ -196,7 +207,9 @@ func TestMakeDeletePool(t *testing.T) {
 
 func TestPingMonitor(t *testing.T) {
     conn, _ := NewConn("admin")
-    conn.ReadDefaultConfigFile()
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
+
     conn.Connect()
 
     // mon id that should work with vstart.sh
@@ -217,13 +230,13 @@ func TestPingMonitor(t *testing.T) {
         }
     }
 
-    t.Error("Could not find a valid monitor id")
-
     conn.Shutdown()
 }
 
 func TestReadConfigFile(t *testing.T) {
     conn, _ := NewConn("admin")
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
 
     // check current log_file value
     log_file_val, err := conn.GetConfigOption("log_file")
@@ -254,7 +267,10 @@ func TestReadConfigFile(t *testing.T) {
 
 func TestWaitForLatestOSDMap(t *testing.T) {
     conn, _ := NewConn("admin")
-    conn.ReadDefaultConfigFile()
+
+    conf_file_path := os.Args[1]
+    conn.ReadConfigFile(conf_file_path)
+
     conn.Connect()
 
     err := conn.WaitForLatestOSDMap()

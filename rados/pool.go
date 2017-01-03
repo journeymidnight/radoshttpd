@@ -4,6 +4,7 @@ package rados
 // #include <stdlib.h>
 // #include <rados/librados.h>
 // #include <radosstriper/libradosstriper.h>
+// #include "rados_extension.h"
 import "C"
 
 import "unsafe"
@@ -98,5 +99,18 @@ func (p *Pool) CreateStriper() (StriperPool, error) {
         return sp, RadosError(int(ret))
     } else {
         return sp, nil
+    }
+}
+
+//add a new flag
+func (p *Pool) WriteSmallObject(oid string, data []byte) error {
+    c_oid := C.CString(oid)
+    defer C.free(unsafe.Pointer(c_oid))
+
+    ret := C.rados_write_with_newobj(p.ioctx, c_oid, (*C.char)(unsafe.Pointer(&data[0])), (C.size_t)(len(data)))
+    if ret == 0 {
+        return nil
+    } else {
+        return RadosError(int(ret))
     }
 }

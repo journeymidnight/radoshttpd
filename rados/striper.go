@@ -5,7 +5,7 @@ package rados
 // #include <stdlib.h>
 // #include <rados/librados.h>
 // #include <radosstriper/libradosstriper.h>
-// #include "force_delete.h"
+// #include "rados_extension.h"
 import "C"
 
 import "unsafe"

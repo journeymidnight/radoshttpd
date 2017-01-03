@@ -345,3 +345,36 @@ func TestUploadDownloadCheckFile(t * testing.T) {
 
     conn.Shutdown()
 }
+
+func TestWriteSmallFile(t * testing.T) {
+    conf_file_path := "/etc/ceph/ceph.conf"
+    test_file_path := "./README.md"
+
+    conn, _ := NewConn("admin")
+    err := conn.ReadConfigFile(conf_file_path)
+    assert.NoError(t, err)
+
+    fmt.Println("connecting")
+    err = conn.Connect()
+    assert.NoError(t, err)
+
+
+    poolname := GetUUID()
+    err = conn.MakePool(poolname)
+    assert.NoError(t, err)
+
+
+    pool, err := conn.OpenPool(poolname)
+    assert.NoError(t, err)
+
+    data, err := ioutil.ReadFile(test_file_path)
+    assert.NoError(t, err)
+
+    err = pool.WriteSmallObject("testoid", data)
+    assert.NoError(t, err)
+
+    err = conn.DeletePool(poolname)
+    assert.NoError(t, err)
+
+    conn.Shutdown()
+}

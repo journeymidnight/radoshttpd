@@ -8,7 +8,7 @@ package rados
 import "C"
 
 import "unsafe"
-
+import "reflect"
 // Pool represents a context for performing I/O within a pool.
 type Pool struct {
     ioctx C.rados_ioctx_t
@@ -106,8 +106,9 @@ func (p *Pool) CreateStriper() (StriperPool, error) {
 func (p *Pool) WriteSmallObject(oid string, data []byte) error {
     c_oid := C.CString(oid)
     defer C.free(unsafe.Pointer(c_oid))
-
-    ret := C.rados_write_with_newobj(p.ioctx, c_oid, (*C.char)(unsafe.Pointer(&data[0])), (C.size_t)(len(data)))
+    hdr := (*reflect.SliceHeader)(unsafe.Pointer(&data))
+    buf := unsafe.Pointer(hdr.Data)
+    ret := C.rados_write_with_newobj(p.ioctx, c_oid, (*C.char)(buf), (C.size_t)(len(data)))
     if ret == 0 {
         return nil
     } else {

@@ -2,6 +2,32 @@
 
 参考api.markdown
 
+# Build
+
++ go > go1.7
+
++ ceph-devel
+
++ rpmbuild
+
++ make
+
+all the dep is in Godeps
+
+```
+make rpm
+```
+
+# Run
+
+Edit wuzei.json, the default configure is not needed to modify.
+
+Use "wuzei" as default shared password for auth.
+
+The cache feature is disabled by default;
+
+The ddos feature is enabled by default; if you do not use ddosproof, it could be disabled.
+
 
 # Cache
 

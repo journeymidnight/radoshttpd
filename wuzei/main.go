@@ -1,4 +1,3 @@
-/* GPLv3 */
 /* deanraccoon@gmail.com */
 /* vim: set ts=4 shiftwidth=4 smarttab noet : */
 

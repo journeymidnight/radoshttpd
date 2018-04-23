@@ -7,8 +7,8 @@ Release:	%{rel}%{?dist}
 Summary:	HTTP server for ceph
 
 Group:		System Environment/Base
-License:	GPL
-URL:		http://10.150.130.22:22222/ceph/radoshttpd
+License:	Apache-2.0
+URL:		https://github.com/journeymidnight/radoshttpd
 Source0:	 %{name}-%{version}-%{rel}.tar.gz
 Source1:        wuzei.json
 Source2:        whitelist

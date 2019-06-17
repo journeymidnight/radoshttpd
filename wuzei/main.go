@@ -853,13 +853,6 @@ func main() {
 
 	var conn  *rados.Conn
 
-	/* pid */
-	if err := CreatePidfile(PIDFILE); err != nil {
-		fmt.Printf("can not create pid file %s\n", PIDFILE) 
-		return
-	}
-	defer RemovePidfile(PIDFILE)
-
 	/* log  */
 	f, err := os.OpenFile(LOGPATH, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {

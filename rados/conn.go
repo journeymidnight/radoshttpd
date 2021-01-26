@@ -16,9 +16,59 @@ type ClusterStat struct {
     Num_objects uint64
 }
 
+type PoolStat struct {
+    Byte_used uint64
+    Kb_used uint64
+    Pecent_used float32
+    Max_avail uint64
+}
+
+type PoolsStatMap struct {
+    StatMap map[string]PoolStat
+}
 // Conn is a connection handle to a Ceph cluster.
 type Conn struct {
     cluster C.rados_t
+}
+
+type CephDetail struct {
+    Stats struct {
+        TotalBytes        int64   `json:"total_bytes"`
+        TotalAvailBytes   int64   `json:"total_avail_bytes"`
+        TotalUsedBytes    int64   `json:"total_used_bytes"`
+        TotalUsedRawBytes int64   `json:"total_used_raw_bytes"`
+        TotalUsedRawRatio float64 `json:"total_used_raw_ratio"`
+        NumOsds           int     `json:"num_osds"`
+        NumPerPoolOsds    int     `json:"num_per_pool_osds"`
+    } `json:"stats"`
+    StatsByClass struct {
+        Hdd struct {
+            TotalBytes        int64   `json:"total_bytes"`
+            TotalAvailBytes   int64   `json:"total_avail_bytes"`
+            TotalUsedBytes    int64   `json:"total_used_bytes"`
+            TotalUsedRawBytes int64   `json:"total_used_raw_bytes"`
+            TotalUsedRawRatio float64 `json:"total_used_raw_ratio"`
+        } `json:"hdd"`
+        Ssd struct {
+            TotalBytes        int64   `json:"total_bytes"`
+            TotalAvailBytes   int64   `json:"total_avail_bytes"`
+            TotalUsedBytes    int64   `json:"total_used_bytes"`
+            TotalUsedRawBytes int64   `json:"total_used_raw_bytes"`
+            TotalUsedRawRatio float64 `json:"total_used_raw_ratio"`
+        } `json:"ssd"`
+    } `json:"stats_by_class"`
+    Pools []struct {
+        Name  string `json:"name"`
+        ID    int    `json:"id"`
+        Stats struct {
+            Stored      int64   `json:"stored"`
+            Objects     int     `json:"objects"`
+            KbUsed      int64   `json:"kb_used"`
+            BytesUsed   int64   `json:"bytes_used"`
+            PercentUsed float64 `json:"percent_used"`
+            MaxAvail    int64   `json:"max_avail"`
+        } `json:"stats"`
+    } `json:"pools"`
 }
 
 // PingMonitor sends a ping to a monitor and returns the reply.
@@ -176,6 +226,23 @@ func (c *Conn) GetClusterStats() (stat ClusterStat, err error) {
             Kb_avail: uint64(c_stat.kb_avail),
             Num_objects: uint64(c_stat.num_objects),
         }, nil
+    }
+}
+
+func (c *Conn) GetCephDf() (response string, status string,  err error) {
+    var cmd *C.char
+    scmd := "df --format json"
+    cmd = C.CString(scmd)
+    cmdlen := (C.ulong)(len(scmd))
+    var outbuf *C.char
+    var outbuf_len C.ulong
+    var outs *C.char
+    var outs_len C.ulong
+    ret := C.rados_mon_command(c.cluster, &cmd, cmdlen, nil, 0, &outbuf, &outbuf_len, &outs, &outs_len)
+    if ret < 0 {
+        return "", "", RadosError(int(ret))
+    } else {
+        return C.GoString(outbuf), C.GoString(outs), nil
     }
 }
 

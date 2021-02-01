@@ -243,7 +243,7 @@ func (c *Conn) GetCephDf() (response string, status string,  err error) {
     if ret < 0 {
         return "", "", RadosError(int(ret))
     } else {
-        return C.GoString(outbuf), C.GoString(outs), nil
+        return C.GoStringN(outbuf, C.int(outbuf_len)), C.GoStringN(outs, C.int(outs_len)), nil
     }
 }
 
